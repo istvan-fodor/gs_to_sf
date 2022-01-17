@@ -12,35 +12,47 @@ from googleapiclient.errors import HttpError
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 # The ID and range of a sample spreadsheet.
-SAMPLE_SPREADSHEET_ID = '1lmseZ3wd4uXvwP1BBFZHkYRQ88Okrmqeum9kYGX_ENc'
-SAMPLE_RANGE_NAME = 'Sheet1'
+SPREADSHEET_ID = '1lmseZ3wd4uXvwP1BBFZHkYRQ88Okrmqeum9kYGX_ENc'
+RANGE_NAME = 'Sheet1'
 
 
-def main():
-    """Shows basic usage of the Sheets API.
-    Prints values from a sample spreadsheet.
-    """
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
+def get_sheet(spreadsheet_id, range):
+    """Extract Data from Google Sheets"""
     try:
-        service = build('sheets', 'v4', credentials=creds)
+        service = build('sheets', 'v4')
 
         # Call the Sheets API
         sheet = service.spreadsheets()
-        result = sheet.values().get(spreadsheetId=SAMPLE_SPREADSHEET_ID, range=SAMPLE_RANGE_NAME).execute()
+        result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range).execute()
         values = result.get('values', [])
 
+        df = None
         if not values:
             print('No data found.')
-            return
-        df = pd.DataFrame(data = values[1:], columns=values[0])
-        for row in values[1:]:
-            # Print columns A and E, which correspond to indices 0 and 4.
-            print(row)
+        else:
+            df = pd.DataFrame(data = values[1:], columns=values[0])
+
+        return df
     except HttpError as err:
         print(err)
+        raise err
+
+def transform(df):
+    """Transform"""
+    return df
+
+def load(df):
+    
+
+def main():
+    try :
+        df = get_sheet()
+        df = transform(df)
+        load(df)
+    except Exception as err:
+        print("Unable to complete ETL flow")
+        print(err)
+        exit(1)
 
 
 if __name__ == '__main__':
