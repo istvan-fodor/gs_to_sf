@@ -1,2 +1,3 @@
-credentials.json
+google_credentials.json
+snowflake_credentials.yaml
 __pycache__

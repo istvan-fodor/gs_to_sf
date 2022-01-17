@@ -1,12 +1,13 @@
 from __future__ import print_function
 import snowflake.connector
-import os.path
+import yaml
 import pandas as pd
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
@@ -42,16 +43,16 @@ def transform(df):
 
     return df
 
-def load_to_store(df):
-    
+def load_to_store(df, snowflake_creds):
+    print("Logging in to Snowflake")
     conn = snowflake.connector.connect(
-                user='ifodor85',
-                password='efn.fyz0ycg5nyb_ZUJ',
-                account='zs98740',
-                warehouse='COMPUTE_WH',
-                database='MY_DB',
-                schema='PUBLIC'
-                )
+                user=snowflake_creds['user'],
+                password=snowflake_creds["password"],
+                account=snowflake_creds["account"],
+                warehouse=snowflake_creds["warehouse"],
+                database=snowflake_creds["database"],
+                schema=snowflake_creds["schema"]
+            )
     
     stmt = """
     MERGE INTO 
@@ -69,15 +70,20 @@ def load_to_store(df):
     """
     
     rows_to_insert = df.values
+    print("Inserting values")
     conn.cursor().executemany(stmt, rows_to_insert)
 
 
-
 def main():
+    with open("snowflake_credentials.yaml", "r") as stream:
+        try:
+            snowflake_creds = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
     try :
-        df = get_sheet()
+        df = get_sheet(SPREADSHEET_ID, RANGE_NAME)
         df = transform(df)
-        load(df)
+        load_to_store(df, snowflake_creds)
     except Exception as err:
         print("Unable to complete ETL flow")
         print(err)
