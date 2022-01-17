@@ -1,5 +1,5 @@
 from __future__ import print_function
-
+import snowflake.connector
 import os.path
 import pandas as pd
 from google.auth.transport.requests import Request
@@ -39,10 +39,39 @@ def get_sheet(spreadsheet_id, range):
 
 def transform(df):
     """Transform"""
+
     return df
 
-def load(df):
+def load_to_store(df):
     
+    conn = snowflake.connector.connect(
+                user='ifodor85',
+                password='efn.fyz0ycg5nyb_ZUJ',
+                account='zs98740',
+                warehouse='COMPUTE_WH',
+                database='MY_DB',
+                schema='PUBLIC'
+                )
+    
+    stmt = """
+    MERGE INTO 
+      records r1 
+    USING 
+        (select ? as id, ? as name, ? as address) r2
+    ON r1.id = r2.id 
+    WHEN MATCHED THEN 
+        UPDATE SET 
+            r1.name = r2.name
+          , r1.address = r2.address
+    WHEN NOT MATCHED THEN
+        INSERT (id, name, address) 
+        VALUES (r2.id, r2.name, r2.address)
+    """
+    
+    rows_to_insert = df.values
+    conn.cursor().executemany(stmt, rows_to_insert)
+
+
 
 def main():
     try :
