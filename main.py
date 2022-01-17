@@ -2,6 +2,8 @@ from __future__ import print_function
 import snowflake.connector
 import yaml
 import pandas as pd
+import numpy as np
+import traceback
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -16,10 +18,13 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = '1lmseZ3wd4uXvwP1BBFZHkYRQ88Okrmqeum9kYGX_ENc'
 RANGE_NAME = 'Sheet1'
 
+snowflake.connector.paramstyle='numeric'
+
 
 def get_sheet(spreadsheet_id, range):
     """Extract Data from Google Sheets"""
     try:
+        print("Fetching data from Google Sheets")
         service = build('sheets', 'v4')
 
         # Call the Sheets API
@@ -31,7 +36,7 @@ def get_sheet(spreadsheet_id, range):
         if not values:
             print('No data found.')
         else:
-            df = pd.DataFrame(data = values[1:], columns=values[0])
+            df = pd.DataFrame(data = values[1:], columns=values[0], dtype=str)
 
         return df
     except HttpError as err:
@@ -40,10 +45,14 @@ def get_sheet(spreadsheet_id, range):
 
 def transform(df):
     """Transform"""
-
+    df['ID'] = df['ID'].astype(int)
     return df
 
 def load_to_store(df, snowflake_creds):
+    """
+    Load dataframe into RECORDS using MERGE command, matching on the ID column.
+    """
+
     print("Logging in to Snowflake")
     conn = snowflake.connector.connect(
                 user=snowflake_creds['user'],
@@ -58,7 +67,7 @@ def load_to_store(df, snowflake_creds):
     MERGE INTO 
       records r1 
     USING 
-        (select ? as id, ? as name, ? as address) r2
+        (select :1 as id, :2 as name, :3 as address) r2
     ON r1.id = r2.id 
     WHEN MATCHED THEN 
         UPDATE SET 
@@ -69,9 +78,15 @@ def load_to_store(df, snowflake_creds):
         VALUES (r2.id, r2.name, r2.address)
     """
     
+    stmt2 = 'INSERT INTO records (id, name, address) values (:1, :2, :3)'
+
     rows_to_insert = df.values
-    print("Inserting values")
+    rows_to_insert = list(map(tuple, rows_to_insert))
+    print(rows_to_insert)
+    print("Merging values")
+    conn.cursor().execute('BEGIN TRANSACTION')
     conn.cursor().executemany(stmt, rows_to_insert)
+    conn.cursor().execute('COMMIT')
 
 
 def main():
@@ -86,9 +101,11 @@ def main():
         load_to_store(df, snowflake_creds)
     except Exception as err:
         print("Unable to complete ETL flow")
-        print(err)
+        traceback.print_exc()
         exit(1)
 
 
 if __name__ == '__main__':
-    main()
+    df = main()
+
+    
